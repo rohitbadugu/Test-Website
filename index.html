@@ -14,7 +14,7 @@ s.parentNode.insertBefore(t,s)}(window, document,'script',
 fbq('init', '665280412528109', {
   debug: true,  // This enables debug mode
 });
-fbq('badMethod', 'PageView');
+fbq('track', 'PageView');
 fbq();
 </script>
 <noscript><img height="1" width="1" style="display:none"
@@ -88,7 +88,7 @@ li {
 
 document.getElementById('addToCartButton').addEventListener('click', function() {
   // cbq('track', 'AddToCart');
-  fbq('track', '');
+  fbq('track', 'AddToCart');
 }, false);
 
 // document.getElementById('leadButton').addEventListener('click', function() {
