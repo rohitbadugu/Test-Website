@@ -84,12 +84,12 @@ li {
 <script>
     document.getElementById('addToWishlistButton').addEventListener('click', function() {
       fbq('track', 'Purchase', {currence: "USD", value: -10.00}, '');
-}, false);
+}, true);
 
 document.getElementById('addToCartButton').addEventListener('click', function() {
   // cbq('track', 'AddToCart');
   fbq('badMethod', 'AddToCart');
-}, false);
+}, true);
 
 // document.getElementById('leadButton').addEventListener('click', function() {
 //   cbq('track', 'Lead');
