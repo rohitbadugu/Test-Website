@@ -15,8 +15,14 @@
     t.src=v;s=b.getElementsByTagName(e)[0];
     s.parentNode.insertBefore(t,s)}(window, document,'script',
     'https://connect.facebook.net/en_US/fbevents.js');
+
+    // Utility: Generate a unique eventID for deduplication
+    function generateEventID() {
+      return 'eid_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    }
+
     fbq('init', '1580328876411962');
-    fbq('track', 'PageView');
+    fbq('track', 'PageView', {}, { eventID: generateEventID() });
   </script>
   <noscript>
     <img height="1" width="1" style="display:none"
@@ -861,7 +867,7 @@
           <div class="product-img">
             ${p.emoji}
             <div class="product-actions">
-              <button class="action-btn" title="Quick View" onclick="showToast('Quick view coming soon!')">👁</button>
+              <button class="action-btn" title="Quick View" onclick="viewProduct(${p.id})">👁</button>
               <button class="action-btn" title="Wishlist" onclick="showToast('Added to wishlist!')">♡</button>
             </div>
           </div>
@@ -906,7 +912,7 @@
       updateCart();
       showToast(`${product.name} added to cart!`);
 
-      // Meta Pixel: AddToCart event
+      // Meta Pixel: AddToCart event (with eventID for deduplication)
       if (typeof fbq !== 'undefined') {
         fbq('track', 'AddToCart', {
           content_name: product.name,
@@ -915,7 +921,7 @@
           content_type: 'product',
           value: product.price,
           currency: 'USD'
-        });
+        }, { eventID: generateEventID() });
       }
     }
 
@@ -986,7 +992,7 @@
 
       const totalPrice = cart.reduce((s, i) => s + i.price * i.qty, 0);
 
-      // Meta Pixel: InitiateCheckout event
+      // Meta Pixel: InitiateCheckout event (with eventID for deduplication)
       if (typeof fbq !== 'undefined') {
         fbq('track', 'InitiateCheckout', {
           content_ids: cart.map(i => i.id),
@@ -994,10 +1000,25 @@
           num_items: cart.reduce((s, i) => s + i.qty, 0),
           value: totalPrice,
           currency: 'USD'
-        });
+        }, { eventID: generateEventID() });
       }
 
-      showToast('Checkout initiated — thank you!');
+      // Meta Pixel: Purchase event (with eventID for deduplication)
+      if (typeof fbq !== 'undefined') {
+        fbq('track', 'Purchase', {
+          content_ids: cart.map(i => i.id),
+          content_type: 'product',
+          num_items: cart.reduce((s, i) => s + i.qty, 0),
+          value: totalPrice,
+          currency: 'USD'
+        }, { eventID: generateEventID() });
+      }
+
+      // Clear cart after successful purchase
+      cart = [];
+      updateCart();
+      toggleCart();
+      showToast('Order placed successfully — thank you!');
     }
 
     /* ═══════════════════════════════════════════
@@ -1007,9 +1028,9 @@
       e.preventDefault();
       const email = e.target.querySelector('input').value;
 
-      // Meta Pixel: Lead event
+      // Meta Pixel: Lead event (with eventID for deduplication)
       if (typeof fbq !== 'undefined') {
-        fbq('track', 'Lead', { content_name: 'Newsletter Signup' });
+        fbq('track', 'Lead', { content_name: 'Newsletter Signup' }, { eventID: generateEventID() });
       }
 
       showToast('Welcome to RunPeak! Check your inbox.');
@@ -1043,27 +1064,26 @@
     });
 
     /* ═══════════════════════════════════════════
-       META PIXEL: ViewContent on scroll to products
+       META PIXEL: ViewContent per product (Quick View)
     ═══════════════════════════════════════════ */
-    let viewContentFired = false;
-    const productObserver = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting && !viewContentFired) {
-          viewContentFired = true;
-          if (typeof fbq !== 'undefined') {
-            fbq('track', 'ViewContent', {
-              content_name: 'Featured Products Section',
-              content_type: 'product_group'
-            });
-          }
-        }
-      });
-    }, { threshold: 0.3 });
+    function viewProduct(id) {
+      const product = products.find(p => p.id === id);
+      if (!product) return;
 
-    document.addEventListener('DOMContentLoaded', () => {
-      const productsSection = document.getElementById('products');
-      if (productsSection) productObserver.observe(productsSection);
-    });
+      // Meta Pixel: ViewContent event for a specific product (with eventID for deduplication)
+      if (typeof fbq !== 'undefined') {
+        fbq('track', 'ViewContent', {
+          content_name: product.name,
+          content_category: product.cat,
+          content_ids: [product.id],
+          content_type: 'product',
+          value: product.price,
+          currency: 'USD'
+        }, { eventID: generateEventID() });
+      }
+
+      showToast(`Viewing ${product.name}`);
+    }
   </script>
 </body>
 </html>
