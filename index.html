@@ -48,6 +48,105 @@
       external_id: window.__rpk_external_id
     });
     fbq('track', 'PageView');
+
+    /* ═══════════════════════════════════════════
+       META CONVERSIONS API (CAPI) — Helper
+       Sends server-side events to the custom CAPI endpoint
+       at graph.facebook.40622.od.com with the same external_id
+       used by the Pixel for cross-channel consistency.
+    ═══════════════════════════════════════════ */
+    (function() {
+      var PIXEL_ID  = '1580328876411962';
+      var API_VERSION = 'v25.0';
+      var CAPI_BASE = 'https://graph.facebook.40622.od.com';
+      var CAPI_ENDPOINT = CAPI_BASE + '/' + API_VERSION + '/' + PIXEL_ID + '/events';
+
+      // SHA-256 hash helper using the Web Crypto API.
+      // CAPI requires external_id to be hashed (unlike Pixel which auto-hashes).
+      async function sha256(message) {
+        var msgBuffer = new TextEncoder().encode(message);
+        var hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+        var hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(function(b) { return b.toString(16).padStart(2, '0'); }).join('');
+      }
+
+      // Read the fbp cookie (_fbp) if available
+      function getFbp() {
+        var match = document.cookie.match(/(?:^|;\s*)_fbp=([^;]*)/);
+        return match ? decodeURIComponent(match[1]) : null;
+      }
+
+      // Read the fbc cookie (_fbc) if available
+      function getFbc() {
+        var match = document.cookie.match(/(?:^|;\s*)_fbc=([^;]*)/);
+        return match ? decodeURIComponent(match[1]) : null;
+      }
+
+      /**
+       * Send a Conversions API event.
+       * @param {string}  eventName   - Standard event name (PageView, AddToCart, etc.)
+       * @param {object}  customData  - Event-specific custom_data payload
+       * @param {string}  [eventId]   - Optional event_id for Pixel↔CAPI deduplication
+       */
+      window.__rpk_sendCAPI = async function(eventName, customData, eventId) {
+        try {
+          var hashedExternalId = await sha256(window.__rpk_external_id);
+
+          var userData = {
+            external_id: [hashedExternalId],
+            client_user_agent: navigator.userAgent
+          };
+
+          // Attach fbp and fbc cookies if present
+          var fbp = getFbp();
+          var fbc = getFbc();
+          if (fbp) userData.fbp = fbp;
+          if (fbc) userData.fbc = fbc;
+
+          var eventData = {
+            event_name: eventName,
+            event_time: Math.floor(Date.now() / 1000),
+            event_source_url: window.location.href,
+            action_source: 'website',
+            user_data: userData
+          };
+
+          if (customData && Object.keys(customData).length > 0) {
+            eventData.custom_data = customData;
+          }
+          if (eventId) {
+            eventData.event_id = eventId;
+          }
+
+          var payload = JSON.stringify({ data: [eventData] });
+
+          // Use navigator.sendBeacon for reliability (fires even on page unload),
+          // with fetch as fallback.
+          var sent = false;
+          if (navigator.sendBeacon) {
+            sent = navigator.sendBeacon(
+              CAPI_ENDPOINT,
+              new Blob([payload], { type: 'application/json' })
+            );
+          }
+          if (!sent) {
+            fetch(CAPI_ENDPOINT, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: payload,
+              keepalive: true
+            }).catch(function() { /* silently fail */ });
+          }
+
+          console.log('[CAPI] Sent ' + eventName + ' to ' + CAPI_BASE);
+        } catch (err) {
+          console.warn('[CAPI] Failed to send ' + eventName + ':', err);
+        }
+      };
+
+      // Fire the PageView CAPI event immediately
+      window.__rpk_sendCAPI('PageView', {});
+    })();
   </script>
   <noscript>
     <img height="1" width="1" style="display:none"
@@ -937,7 +1036,8 @@
       updateCart();
       showToast(`${product.name} added to cart!`);
 
-      // Meta Pixel: AddToCart event
+      // Meta Pixel + CAPI: AddToCart event
+      var addToCartEventId = 'addtocart_' + product.id + '_' + Date.now();
       if (typeof fbq !== 'undefined') {
         fbq('track', 'AddToCart', {
           content_name: product.name,
@@ -946,7 +1046,18 @@
           content_type: 'product',
           value: product.price,
           currency: 'USD'
-        }, { eventID: 'addtocart_' + product.id + '_' + Date.now() });
+        }, { eventID: addToCartEventId });
+      }
+      // Conversions API: AddToCart (same external_id, same event_id for dedup)
+      if (typeof window.__rpk_sendCAPI === 'function') {
+        window.__rpk_sendCAPI('AddToCart', {
+          content_name: product.name,
+          content_category: product.cat,
+          content_ids: [String(product.id)],
+          content_type: 'product',
+          value: product.price,
+          currency: 'USD'
+        }, addToCartEventId);
       }
     }
 
@@ -1017,15 +1128,28 @@
 
       const totalPrice = cart.reduce((s, i) => s + i.price * i.qty, 0);
 
-      // Meta Pixel: InitiateCheckout event
+      // Meta Pixel + CAPI: InitiateCheckout event
+      var checkoutEventId = 'checkout_' + Date.now();
+      var checkoutContentIds = cart.map(i => String(i.id));
+      var checkoutNumItems = cart.reduce((s, i) => s + i.qty, 0);
       if (typeof fbq !== 'undefined') {
         fbq('track', 'InitiateCheckout', {
-          content_ids: cart.map(i => i.id),
+          content_ids: checkoutContentIds,
           content_type: 'product',
-          num_items: cart.reduce((s, i) => s + i.qty, 0),
+          num_items: checkoutNumItems,
           value: totalPrice,
           currency: 'USD'
-        }, { eventID: 'checkout_' + Date.now() });
+        }, { eventID: checkoutEventId });
+      }
+      // Conversions API: InitiateCheckout (same external_id, same event_id for dedup)
+      if (typeof window.__rpk_sendCAPI === 'function') {
+        window.__rpk_sendCAPI('InitiateCheckout', {
+          content_ids: checkoutContentIds,
+          content_type: 'product',
+          num_items: checkoutNumItems,
+          value: totalPrice,
+          currency: 'USD'
+        }, checkoutEventId);
       }
 
       showToast('Checkout initiated — thank you!');
@@ -1038,9 +1162,16 @@
       e.preventDefault();
       const email = e.target.querySelector('input').value;
 
-      // Meta Pixel: Lead event
+      // Meta Pixel + CAPI: Lead event
+      var leadEventId = 'lead_' + Date.now();
       if (typeof fbq !== 'undefined') {
-        fbq('track', 'Lead', { content_name: 'Newsletter Signup' });
+        fbq('track', 'Lead', { content_name: 'Newsletter Signup' }, { eventID: leadEventId });
+      }
+      // Conversions API: Lead (same external_id, same event_id for dedup)
+      if (typeof window.__rpk_sendCAPI === 'function') {
+        window.__rpk_sendCAPI('Lead', {
+          content_name: 'Newsletter Signup'
+        }, leadEventId);
       }
 
       showToast('Welcome to RunPeak! Check your inbox.');
@@ -1081,11 +1212,19 @@
       entries.forEach(entry => {
         if (entry.isIntersecting && !viewContentFired) {
           viewContentFired = true;
+          var viewContentEventId = 'viewcontent_' + Date.now();
           if (typeof fbq !== 'undefined') {
             fbq('track', 'ViewContent', {
               content_name: 'Featured Products Section',
               content_type: 'product_group'
-            });
+            }, { eventID: viewContentEventId });
+          }
+          // Conversions API: ViewContent (same external_id, same event_id for dedup)
+          if (typeof window.__rpk_sendCAPI === 'function') {
+            window.__rpk_sendCAPI('ViewContent', {
+              content_name: 'Featured Products Section',
+              content_type: 'product_group'
+            }, viewContentEventId);
           }
         }
       });
