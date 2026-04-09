@@ -861,7 +861,7 @@
           <div class="product-img">
             ${p.emoji}
             <div class="product-actions">
-              <button class="action-btn" title="Quick View" onclick="showToast('Quick view coming soon!')">👁</button>
+              <button class="action-btn" title="Quick View" onclick="viewProduct(${p.id})">👁</button>
               <button class="action-btn" title="Wishlist" onclick="showToast('Added to wishlist!')">♡</button>
             </div>
           </div>
@@ -997,7 +997,18 @@
         });
       }
 
-      showToast('Checkout initiated — thank you!');
+      // Meta Pixel: Purchase event
+      if (typeof fbq !== 'undefined') {
+        fbq('track', 'Purchase', {
+          content_ids: cart.map(i => i.id),
+          content_type: 'product',
+          num_items: cart.reduce((s, i) => s + i.qty, 0),
+          value: totalPrice,
+          currency: 'USD'
+        });
+      }
+
+      showToast('Order confirmed — thank you for your purchase!');
     }
 
     /* ═══════════════════════════════════════════
@@ -1043,27 +1054,26 @@
     });
 
     /* ═══════════════════════════════════════════
-       META PIXEL: ViewContent on scroll to products
+       META PIXEL: ViewContent on individual product view
     ═══════════════════════════════════════════ */
-    let viewContentFired = false;
-    const productObserver = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting && !viewContentFired) {
-          viewContentFired = true;
-          if (typeof fbq !== 'undefined') {
-            fbq('track', 'ViewContent', {
-              content_name: 'Featured Products Section',
-              content_type: 'product_group'
-            });
-          }
-        }
-      });
-    }, { threshold: 0.3 });
+    function viewProduct(id) {
+      const product = products.find(p => p.id === id);
+      if (!product) return;
 
-    document.addEventListener('DOMContentLoaded', () => {
-      const productsSection = document.getElementById('products');
-      if (productsSection) productObserver.observe(productsSection);
-    });
+      // Meta Pixel: ViewContent event
+      if (typeof fbq !== 'undefined') {
+        fbq('track', 'ViewContent', {
+          content_name: product.name,
+          content_category: product.cat,
+          content_ids: [product.id],
+          content_type: 'product',
+          value: product.price,
+          currency: 'USD'
+        });
+      }
+
+      showToast('Viewing: ' + product.name);
+    }
   </script>
 </body>
 </html>
