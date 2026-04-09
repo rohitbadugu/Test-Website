@@ -15,7 +15,38 @@
     t.src=v;s=b.getElementsByTagName(e)[0];
     s.parentNode.insertBefore(t,s)}(window, document,'script',
     'https://connect.facebook.net/en_US/fbevents.js');
-    fbq('init', '1580328876411962');
+
+    // Generate or retrieve a persistent external_id for this visitor.
+    // This ID is stored in localStorage so it remains consistent across
+    // sessions and page reloads, which is required by Meta's documentation
+    // to ensure cross-channel consistency.
+    (function() {
+      var STORAGE_KEY = 'rpk_external_id';
+      var externalId = localStorage.getItem(STORAGE_KEY);
+      if (!externalId) {
+        // Generate a UUID v4
+        if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+          externalId = crypto.randomUUID();
+        } else {
+          // Fallback for older browsers
+          externalId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+            var r = Math.random() * 16 | 0;
+            var v = c === 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+          });
+        }
+        localStorage.setItem(STORAGE_KEY, externalId);
+      }
+      // Store on window so it can be referenced by event-firing code below
+      window.__rpk_external_id = externalId;
+    })();
+
+    // Initialize Meta Pixel with external_id as an advanced matching parameter.
+    // Per Meta docs, external_id in the fbq('init') call is automatically
+    // included with every subsequent event fire (PageView, AddToCart, etc.).
+    fbq('init', '1580328876411962', {
+      external_id: window.__rpk_external_id
+    });
     fbq('track', 'PageView');
   </script>
   <noscript>
@@ -914,8 +945,8 @@
           content_ids: [product.id],
           content_type: 'product',
           value: product.price,
-          currency: 'US'
-        });
+          currency: 'USD'
+        }, { eventID: 'addtocart_' + product.id + '_' + Date.now() });
       }
     }
 
@@ -994,7 +1025,7 @@
           num_items: cart.reduce((s, i) => s + i.qty, 0),
           value: totalPrice,
           currency: 'USD'
-        });
+        }, { eventID: 'checkout_' + Date.now() });
       }
 
       showToast('Checkout initiated — thank you!');
