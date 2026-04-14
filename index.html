@@ -52,13 +52,13 @@
     /* ═══════════════════════════════════════════
        META CONVERSIONS API (CAPI) — Helper
        Sends server-side events to the custom CAPI endpoint
-       at graph.facebook.40622.od.com with the same external_id
+       at graph.facebook.com with the same external_id
        used by the Pixel for cross-channel consistency.
     ═══════════════════════════════════════════ */
     (function() {
       var PIXEL_ID  = '1673223273816908';
       var API_VERSION = 'v25.0';
-      var CAPI_BASE = 'https://graph.facebook.40622.od.com';
+      var CAPI_BASE = 'https://graph.facebook.com';
       var CAPI_ENDPOINT = CAPI_BASE + '/' + API_VERSION + '/' + PIXEL_ID + '/events';
 
       // SHA-256 hash helper using the Web Crypto API.
