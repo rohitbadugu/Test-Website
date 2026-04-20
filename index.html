@@ -51,94 +51,57 @@
 
     /* ═══════════════════════════════════════════
        META CONVERSIONS API (CAPI) — Helper
-       Sends server-side events to the custom CAPI endpoint
-       at graph.facebook.com with the same external_id
-       used by the Pixel for cross-channel consistency.
+       Posts events to our own backend (/api/capi), which attaches the
+       access_token server-side and forwards them to Meta. The token is
+       never exposed to the browser.
     ═══════════════════════════════════════════ */
     (function() {
-      var PIXEL_ID  = '1580328876411962';
-      var API_VERSION = 'v25.0';
-      var CAPI_BASE = 'https://graph.facebook.com';
-      var CAPI_ENDPOINT = CAPI_BASE + '/' + API_VERSION + '/' + PIXEL_ID + '/events';
-
-      // SHA-256 hash helper using the Web Crypto API.
-      // CAPI requires external_id to be hashed (unlike Pixel which auto-hashes).
-      async function sha256(message) {
-        var msgBuffer = new TextEncoder().encode(message);
-        var hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-        var hashArray = Array.from(new Uint8Array(hashBuffer));
-        return hashArray.map(function(b) { return b.toString(16).padStart(2, '0'); }).join('');
-      }
-
-      // Read the fbp cookie (_fbp) if available
-      function getFbp() {
-        var match = document.cookie.match(/(?:^|;\s*)_fbp=([^;]*)/);
-        return match ? decodeURIComponent(match[1]) : null;
-      }
-
-      // Read the fbc cookie (_fbc) if available
-      function getFbc() {
-        var match = document.cookie.match(/(?:^|;\s*)_fbc=([^;]*)/);
-        return match ? decodeURIComponent(match[1]) : null;
-      }
+      var CAPI_ENDPOINT = '/api/capi';
 
       /**
-       * Send a Conversions API event.
+       * Send a Conversions API event through our backend.
        * @param {string}  eventName   - Standard event name (PageView, AddToCart, etc.)
        * @param {object}  customData  - Event-specific custom_data payload
        * @param {string}  [eventId]   - Optional event_id for Pixel↔CAPI deduplication
        */
-      window.__rpk_sendCAPI = async function(eventName, customData, eventId) {
+      window.__rpk_sendCAPI = function(eventName, customData, eventId) {
         try {
-          var hashedExternalId = await sha256(window.__rpk_external_id);
-
-          var userData = {
-            external_id: [hashedExternalId],
-            client_user_agent: navigator.userAgent
-          };
-
-          // Attach fbp and fbc cookies if present
-          var fbp = getFbp();
-          var fbc = getFbc();
-          if (fbp) userData.fbp = fbp;
-          if (fbc) userData.fbc = fbc;
-
-          var eventData = {
+          var payload = {
             event_name: eventName,
-            event_time: Math.floor(Date.now() / 1000),
             event_source_url: window.location.href,
-            action_source: 'website',
-            user_data: userData
+            user_data: {
+              // The backend also SHA-256 hashes this via the SDK.
+              externalId: window.__rpk_external_id
+            }
           };
-
           if (customData && Object.keys(customData).length > 0) {
-            eventData.custom_data = customData;
+            payload.custom_data = customData;
           }
           if (eventId) {
-            eventData.event_id = eventId;
+            payload.event_id = eventId;
           }
 
-          var payload = JSON.stringify({ data: [eventData] });
+          var body = JSON.stringify(payload);
 
-          // Use navigator.sendBeacon for reliability (fires even on page unload),
-          // with fetch as fallback.
-          var sent = false;
-          if (navigator.sendBeacon) {
-            sent = navigator.sendBeacon(
-              CAPI_ENDPOINT,
-              new Blob([payload], { type: 'application/json' })
-            );
-          }
-          if (!sent) {
+          // Prefer fetch so we get a proper response (useful when the server
+          // generates an event_id and we want to pipe it back into fbq).
+          // Fallback to sendBeacon on page unload scenarios.
+          if (typeof fetch === 'function') {
             fetch(CAPI_ENDPOINT, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: payload,
+              body: body,
+              credentials: 'same-origin',
               keepalive: true
             }).catch(function() { /* silently fail */ });
+          } else if (navigator.sendBeacon) {
+            navigator.sendBeacon(
+              CAPI_ENDPOINT,
+              new Blob([body], { type: 'application/json' })
+            );
           }
 
-          console.log('[CAPI] Sent ' + eventName + ' to ' + CAPI_BASE);
+          console.log('[CAPI] Sent ' + eventName + ' to backend');
         } catch (err) {
           console.warn('[CAPI] Failed to send ' + eventName + ':', err);
         }
