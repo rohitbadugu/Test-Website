@@ -44,7 +44,7 @@
     // Initialize Meta Pixel with external_id as an advanced matching parameter.
     // Per Meta docs, external_id in the fbq('init') call is automatically
     // included with every subsequent event fire (PageView, AddToCart, etc.).
-    fbq('init', '1673223273816908', {
+    fbq('init', '1580328876411962', {
       external_id: window.__rpk_external_id
     });
     fbq('track', 'PageView');
@@ -56,7 +56,7 @@
        used by the Pixel for cross-channel consistency.
     ═══════════════════════════════════════════ */
     (function() {
-      var PIXEL_ID  = '1673223273816908';
+      var PIXEL_ID  = '1580328876411962';
       var API_VERSION = 'v25.0';
       var CAPI_BASE = 'https://graph.facebook.com';
       var CAPI_ENDPOINT = CAPI_BASE + '/' + API_VERSION + '/' + PIXEL_ID + '/events';
