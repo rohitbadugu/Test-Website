@@ -1,0 +1,18 @@
+{
+  "name": "runpeak-site",
+  "version": "1.0.0",
+  "description": "RunPeak demo e-commerce site with Meta Pixel + Conversions API (CAPI) backend.",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "facebook-nodejs-business-sdk": "^21.0.0"
+  }
+}
